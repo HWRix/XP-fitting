@@ -1,0 +1,30 @@
+# Large data directories (don't track in git)
+BPRP_spectra/
+stellar_models/
+griddl-gal-ob-vd3-line_calib/
+fit_plots/
+atlas_fits/
+phoenix_fits/
+atlas_models/
+powr_models/
+trash/
+
+# Large data files
+*.tgz
+iso_params.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Keep these (small, important)
+# *.fits  -- some are small catalogs, we'll add selectively
+# *.ipynb -- the code
+# *.md    -- documentation
+# *.csv   -- small output tables
