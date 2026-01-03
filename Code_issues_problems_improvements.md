@@ -31,26 +31,19 @@ password = '<passwd>'
 
 ---
 
-### 3. Inconsistent Model Naming
+### 3. ~~Inconsistent Model Naming~~ [FIXED]
 
-The download notebook was modified to use unified naming (`atlas-or-phoenix-TTT-GG.txt`), but:
-- The `save_model()` function still accepts a `model_type` parameter
-- The verification cell counts "phoenix" and "atlas" prefixes separately (finds 0 phoenix files)
-- Actual files all have `atlas-or-phoenix-` prefix
+~~The download notebook was modified to use unified naming (`atlas-or-phoenix-TTT-GG.txt`), but the verification cell counts "phoenix" and "atlas" prefixes separately (finds 0 phoenix files).~~
 
-**Impact**: Cosmetic — the fitting notebook handles this correctly.
-
-**Fix**: Clean up `save_model()` to always use unified naming, update verification logic.
+**Status**: Fixed — verification now counts by Teff range (< 10000K = PHOENIX).
 
 ---
 
-### 4. Model Type Not Tracked in Output
+### 4. ~~Model Type Not Tracked in Output~~ [FIXED]
 
-The output CSV doesn't record which model type (PoWR vs ATLAS/PHOENIX) provided the best fit.
+~~The output CSV doesn't record which model type (PoWR vs ATLAS/PHOENIX) provided the best fit.~~
 
-**Impact**: Loses information about whether the fit came from spherical (PoWR) or plane-parallel models.
-
-**Fix**: Add `model_type` column to output.
+**Status**: Fixed — output now includes `model_source` column ('phoenix', 'atlas', or 'powr').
 
 ---
 
@@ -88,15 +81,13 @@ The G23 extinction law supports R_V = 2.3 to 5.6.
 
 ---
 
-### Temperature Coverage Gap at Cool End
+### ~~Temperature Coverage Gap at Cool End~~ [FIXED]
 
-**Current**: 7,600–50,000 K (PHOENIX + ATLAS + PoWR)
+~~**Current**: 7,600–50,000 K (PHOENIX + ATLAS + PoWR)~~
 
-**Goal**: 3,800–50,000 K
+**Status**: Fixed — PHOENIX extended to 3,800K. Current coverage: 3,800–56,000 K.
 
-**Missing**: PHOENIX models for 3,800–7,600 K need to be added. The Göttingen server has these; the download code just needs extended `PHOENIX_TEFF_VALUES`.
-
-**Caution**: Below ~5,000 K, molecular bands (TiO, H₂O) become important. BP/RP resolution may be insufficient to constrain Teff precisely.
+**Note**: Below ~5,000 K, molecular bands (TiO, H₂O) become important. BP/RP resolution may be insufficient to constrain Teff precisely for very cool stars.
 
 ---
 
@@ -126,20 +117,18 @@ The isochrone-based radius normalization assumes:
 
 ### High Priority
 
-1. **Extend PHOENIX to lower Teff**
-   - Add models from 3,800–7,600 K
-   - Test fitting on known cool standards
-   - Effort: Low (code structure already supports this)
+1. ~~**Extend PHOENIX to lower Teff**~~ [DONE]
+   - ~~Add models from 3,800–7,600 K~~
+   - **Status**: Implemented. 192 PHOENIX models now cover 3,800–10,000 K.
 
 2. **Expand R_V grid**
    - Change to ~10 values from 2.3–5.0
    - Pre-compute extinction table for all values
    - Effort: Trivial code change, ~3× slower fitting
 
-3. **Add model_type to output**
-   - Track which model family (PoWR/ATLAS/PHOENIX) gave best fit
-   - Useful for validation and understanding systematics
-   - Effort: ~10 lines of code
+3. ~~**Add model_type to output**~~ [DONE]
+   - ~~Track which model family (PoWR/ATLAS/PHOENIX) gave best fit~~
+   - **Status**: Implemented as `model_source` column.
 
 4. **Add quality flags**
    - `flag_av_boundary`: A_V at grid edge
@@ -147,40 +136,55 @@ The isochrone-based radius normalization assumes:
    - `flag_poor_spec_fit`: χ²_spec/dof > threshold
    - Effort: Moderate
 
+5. **Add logg=1.0 to PHOENIX grid** [NEW]
+   - Currently logg=[2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
+   - logg=1.0 needed for red giants
+   - Effort: Low
+
+6. **Add R_std uncertainty calculation** [NEW]
+   - Currently output Mass_std but not R_std
+   - Propagate logL_std through Stefan-Boltzmann
+   - Effort: Low
+
+7. **Add model caching** [NEW]
+   - Skip already-downloaded models during re-runs
+   - Check if output file exists before download
+   - Effort: Low
+
 ### Medium Priority
 
-5. **Parallelization**
+8. **Parallelization**
    - Current: Serial loop over stars
    - Could use `multiprocessing` or `joblib` for ~10× speedup
    - Effort: Moderate (need to handle file I/O carefully)
 
-6. **Caching/checkpointing**
+9. **Fitting checkpointing**
    - Save intermediate results to allow restart after failure
    - Currently must restart from beginning if notebook crashes
    - Effort: Moderate
 
-7. **MCMC or nested sampling for uncertainties**
-   - Current: Only reports best-fit, no formal uncertainties
-   - Could use `emcee` or `dynesty` for posterior distributions
-   - Effort: Significant refactoring
+10. **MCMC or nested sampling for uncertainties**
+    - Current: Only reports best-fit, no formal uncertainties
+    - Could use `emcee` or `dynesty` for posterior distributions
+    - Effort: Significant refactoring
 
-8. **Better A_V optimization**
-   - Current: Grid + parabolic refinement
-   - Could use `scipy.optimize.minimize_scalar` for more robust convergence
-   - Effort: Low
+11. **Better A_V optimization**
+    - Current: Grid + parabolic refinement
+    - Could use `scipy.optimize.minimize_scalar` for more robust convergence
+    - Effort: Low
 
 ### Lower Priority
 
-9. **Add metallicity dimension**
-   - Download [M/H] = -1.0, -0.5, +0.3 grids
-   - Add [M/H] to fitting grid
-   - Effort: High (significantly more models, slower fitting)
+12. **Add metallicity dimension**
+    - Download [M/H] = -1.0, -0.5, +0.3 grids
+    - Add [M/H] to fitting grid
+    - Effort: High (significantly more models, slower fitting)
 
-10. **Handle binaries**
+13. **Handle binaries**
     - Fit composite spectra with two components
     - Effort: High (doubles parameter space)
 
-11. **Web interface / CLI tool**
+14. **Web interface / CLI tool**
     - Convert notebooks to standalone scripts
     - Add command-line interface for batch processing
     - Effort: Moderate
@@ -210,8 +214,14 @@ The isochrone-based radius normalization assumes:
 
 ## Recommended Next Steps
 
-1. **Immediate**: Fix R_V grid (expand to ~10 values)
-2. **Short-term**: Add PHOENIX models down to 3,800 K
-3. **Short-term**: Add quality flags and model_type to output
-4. **Medium-term**: Add parallelization for large catalogs
-5. **Medium-term**: Validate against APOGEE/GALAH/benchmark stars
+1. **Immediate**: Run full fitting with N_MAX_FIT=None
+2. **Short-term**: Add model caching to skip existing downloads
+3. **Short-term**: Add logg=1.0 to PHOENIX grid for red giants
+4. **Short-term**: Add R_std calculation
+5. **Short-term**: Expand R_V grid to ~10 values
+6. **Medium-term**: Add quality flags (boundary, degeneracy, poor fit)
+7. **Medium-term**: Add parallelization for large catalogs
+8. **Medium-term**: Validate against APOGEE/GALAH/benchmark stars
+
+---
+*Last updated: 2026-01-02*

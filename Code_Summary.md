@@ -2,11 +2,12 @@
 
 ## Scientific Goal
 
-Determine stellar parameters (Teff, log g, A_V) for stars observed by Gaia DR3 by fitting their low-resolution BP/RP spectra (R~50-100) with synthetic stellar atmosphere models. The fitting jointly constrains:
+Determine stellar parameters (Teff, log g, A_V, Mass, L, R) for stars observed by Gaia DR3 by fitting their low-resolution BP/RP spectra (R~50-100) with synthetic stellar atmosphere models. The fitting jointly constrains:
 
 1. **Spectral shape** — sensitive to Teff and log g
 2. **Extinction** — modifies the spectral slope, especially in the blue
 3. **Distance** — via Gaia parallax, which constrains the absolute flux level
+4. **Stellar properties** — Mass, Luminosity, Radius from isochrone matching
 
 This joint spectro-photometric-astrometric approach breaks degeneracies that would plague photometry-only or spectroscopy-only methods.
 
@@ -16,13 +17,13 @@ This joint spectro-photometric-astrometric approach breaks degeneracies that wou
 
 ### Why Three Model Grids?
 
-| Model | Type | Teff Range | Strengths |
-|-------|------|------------|-----------|
-| **PoWR** | Spherical, NLTE, wind | 15,000–50,000 K | Proper treatment of stellar winds, NLTE effects critical for O/early-B stars |
-| **ATLAS** | Plane-parallel, LTE | 10,000–15,000 K | Well-tested, extensive line lists, good for late-B/early-A |
-| **PHOENIX** | Plane-parallel, NLTE option | 7,600–10,000 K | Better molecular opacities for cooler stars |
+| Model | Type | Teff Range | N_models | Strengths |
+|-------|------|------------|----------|-----------|
+| **PHOENIX** | Plane-parallel | 3,800–10,000 K | 192 | Molecular opacities for cool stars, extended to K-type |
+| **ATLAS** | Plane-parallel, LTE | 10,000–15,000 K | 39 | Well-tested, extensive line lists for B/A stars |
+| **PoWR** | Spherical, NLTE, wind | 15,000–56,000 K | 480 | Proper wind treatment, NLTE for O/early-B stars |
 
-**Current limitation**: The code was designed for hot stars; extending to 3,800 K will require additional PHOENIX models and careful handling of molecular bands.
+**Total: 711 models** covering 3,800–56,000 K.
 
 ### The Isochrone Normalization Problem
 
@@ -34,13 +35,24 @@ ATLAS and PHOENIX are **plane-parallel** — they output surface flux (erg/s/cm�
 F_observed = F_surface × (R_star / d)²
 ```
 
-**Solution**: Use Padova isochrones to map (Teff, log g) → L/L_sun, then derive radius via Stefan-Boltzmann:
+**Solution**: Use Padova isochrones to map (Teff, log g) → (L, M, R):
 
 ```
-L = 4π R² σ T_eff⁴   →   R = √(L / 4π σ T_eff⁴)
+Isochrone lookup: (Teff, log g) → logL, Mass
+Stefan-Boltzmann: L = 4π R² σ T_eff⁴  →  R = √(L / 4π σ T_eff⁴)
 ```
 
 This assumes the star lies on a theoretical isochrone (valid for single, non-peculiar stars). The isochrone table (`Padova_isochrones.fits`) contains 13,500 points spanning log(Teff) = 3.18–5.35 and log g = -2.2 to 6.2.
+
+### PoWR Model Filtering
+
+Not all PoWR grid points correspond to physical stellar evolution tracks. Very hot temperatures with high log g (e.g., 50,000 K at log g = 4.5) don't exist on isochrones.
+
+**Filter criterion**: Keep only PoWR models where an isochrone point exists within:
+- 5% in Teff
+- 0.5 dex in log g
+
+Result: 480 of ~700 PoWR models pass the filter.
 
 ### Extinction: Gordon et al. (2023)
 
@@ -58,7 +70,7 @@ F_reddened(λ) = F_intrinsic(λ) × 10^(-0.4 × A_V × A(λ)/A(V))
 
 where A(λ)/A(V) depends on R_V and is pre-computed on the Gaia wavelength grid for speed.
 
-**Current R_V grid**: [2.5, 3.1, 3.7] — intentionally coarse; see Issues document for discussion.
+**Current R_V grid**: [2.5, 3.1, 3.7] — intentionally coarse for speed; expansion planned.
 
 ### Joint Chi-Square with Parallax Constraint
 
@@ -74,34 +86,38 @@ where:
 
 The wavelength weights w(λ) give 2× weight to the blue region (340–480 nm) where extinction effects are strongest and Teff sensitivity is highest.
 
-The parallax term is crucial: it prevents the fitter from finding degenerate solutions where a hotter, more distant star could mimic a cooler, closer one.
+**The parallax term is crucial**: it prevents the fitter from finding degenerate solutions where a hotter, more distant star could mimic a cooler, closer one. This joint constraint is a key strength of the method.
 
 ---
 
 ## Model Coverage Summary
 
 ```
-Temperature (K):  3,800 -------- 7,600 -------- 10,000 -------- 15,000 -------- 50,000
-                    │              │               │               │               │
-                    │   [PHOENIX]  │   [PHOENIX]   │    [ATLAS]    │    [PoWR]     │
-                    │   (planned)  │   7.6-10 kK   │   10-15 kK    │   15-50 kK    │
-                    │              │               │               │               │
-                    └──────────────┴───────────────┴───────────────┴───────────────┘
-                         Future         Current coverage (combined grids)
+Temperature (K):  3,800 -------- 10,000 -------- 15,000 -------- 56,000
+                    │               │               │               │
+                    │   [PHOENIX]   │    [ATLAS]    │    [PoWR]     │
+                    │   192 models  │   39 models   │  480 models   │
+                    │   3.8-10 kK   │   10-15 kK    │  15-56 kK     │
+                    └───────────────┴───────────────┴───────────────┘
+                              Complete coverage: 711 models
 ```
 
-All models are normalized to flux at 10 pc in the same format:
-- 2-column ASCII: wavelength (Å), log₁₀(flux in erg/s/cm²/Å)
-- Resampled to Gaia wavelength grid before fitting
+All models are stored in a unified format:
+- Spectra: 2-column ASCII (wavelength Å, log₁₀ flux at 10pc)
+- Properties: `model_manifest.csv` with Teff, logg, logL, Mass, Mass_std, R_Rsun
 
 ---
 
 ## Output Products
 
-1. **CSV table** (`Zari_G_bright_fits.csv`): Best-fit parameters per star
-   - source_id, Teff, log g, A_V, R_V, distance_pc, G_mag, M_G, χ²_red
+1. **Model manifest** (`model_manifest.csv`): Properties of all 711 valid models
+   - source, Teff, logg, logL, Mass, Mass_std, R_Rsun, filename
 
-2. **Diagnostic plots** (`fit_plots/fit_<source_id>.png`):
+2. **Fit results CSV** (`Zari_G_bright_fits.csv`): Best-fit parameters per star
+   - source_id, Teff, logg, A_V, R_V, distance_pc, gmag, M_G, chi2_red
+   - model_source, logL, Mass, Mass_std, R_Rsun
+
+3. **Diagnostic plots** (`fit_plots/fit_<source_id>.png`):
    - Top panel: observed vs. model spectrum
    - Bottom panel: residuals in units of σ
    - Rayleigh-Jeans reference line for visual sanity check
