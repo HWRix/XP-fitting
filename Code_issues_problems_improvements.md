@@ -141,10 +141,9 @@ The isochrone-based radius normalization assumes:
    - logg=1.0 needed for red giants
    - Effort: Low
 
-6. **Add R_std uncertainty calculation** [NEW]
-   - Currently output Mass_std but not R_std
-   - Propagate logL_std through Stefan-Boltzmann
-   - Effort: Low
+6. ~~**Add R_std uncertainty calculation**~~ [DONE in v4]
+   - v4 PSM interpolates logL continuously, derives R_Rsun via Stefan-Boltzmann
+   - R_Rsun_fit varies continuously with Teff_fit and logL_fit
 
 7. **Add model caching** [NEW]
    - Skip already-downloaded models during re-runs
@@ -214,14 +213,54 @@ The isochrone-based radius normalization assumes:
 
 ## Recommended Next Steps
 
-1. **Immediate**: Run full fitting with N_MAX_FIT=None
-2. **Short-term**: Add model caching to skip existing downloads
-3. **Short-term**: Add logg=1.0 to PHOENIX grid for red giants
-4. **Short-term**: Add R_std calculation
+1. **Immediate**: Regenerate model_manifest.csv (re-run download notebook to remove PoWR duplicates)
+2. **Immediate**: Run v4 fitting with N_MAX_FIT=None
+3. **Short-term**: Add model caching to skip existing downloads
+4. **Short-term**: Add logg=1.0 to PHOENIX grid for red giants
 5. **Short-term**: Expand R_V grid to ~10 values
 6. **Medium-term**: Add quality flags (boundary, degeneracy, poor fit)
 7. **Medium-term**: Add parallelization for large catalogs
 8. **Medium-term**: Validate against APOGEE/GALAH/benchmark stars
 
 ---
-*Last updated: 2026-01-02*
+
+## Scaling Roadmap
+
+### Current Workflow
+```
+source_ids.fits → [v2: enrich + download spectra] → sample_enriched.fits
+                                                            ↓
+                                    [v4: fit] → sample_enriched_fits.csv
+```
+- **Minimal input**: Only `source_id`, `Gmag`, `parallax`, `parallax_error` required
+- **v2 auto-fetches** ra/dec from Gaia archive if not present (Cell 20)
+- Output filenames trace back to input (e.g., `my_stars.fits` → `my_stars_enriched_fits.csv`)
+
+### Phase 1: Current (up to ~1k stars)
+- Keep current notebooks
+- Add checkpointing to v4:
+  - Output CSV appended incrementally
+  - Skip source_ids already in output
+  - Can restart after interruption
+
+### Phase 2: Unified Script (5k+ stars)
+- Single `fit_pipeline.py` with CLI
+- Handles download + enrich + fit in one command
+- Parallelized fitting loop with `multiprocessing`
+- Example: `python fit_pipeline.py --input ids.csv --n-workers 8`
+
+### Phase 3: Production Scale (50k-500k stars)
+- Convert spectra storage to HDF5 (single file, ~10× faster I/O)
+  - 100k spectra: ~2-3 GB compressed
+  - 500k spectra: ~10-15 GB compressed
+- Pre-compute A23/W25 lookup table for full sample
+- Run on cluster or multi-core machine
+
+### Key Design Principles
+1. **Model prep stays separate** — truly one-time task
+2. **Cache everything** — spectra, enrichment, fit results
+3. **Checkpoint frequently** — enable restart after interruption
+4. **Parallelize fitting** — main computational bottleneck
+
+---
+*Last updated: 2026-01-04*

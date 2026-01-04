@@ -1,106 +1,84 @@
-# Hot Star PoWR Fitting with Automatic Gaia Spectrum Download
+# Hot Star Fitting: Gaia BP/RP Spectra with Stellar Atmosphere Models
 
 ## Overview
 
-This notebook automatically fits PoWR stellar atmosphere models to hot stars' Gaia BP/RP spectra, with built-in functionality to download missing spectra from the Gaia archive.
+This pipeline fits stellar atmosphere models to Gaia DR3 BP/RP spectra to determine stellar parameters (Teff, log g, A_V, R_V, Mass, L, R). The fitting jointly constrains spectral shape, extinction, and distance via Gaia parallax.
 
-## Input Requirements
+## Quick Start
 
-Your `hot_star_sample.fits` file must contain at least these columns:
-- **source_id** (int64): Gaia DR3 source identifier
-- **parallax** (float): Parallax in mas (can be NaN)
-- **parallax_error** (float): Parallax uncertainty in mas (can be NaN)
-- **phot_g_mean_mag** (float): Gaia G magnitude (or 'Gmag')
+### 1. Prepare Input Catalog
+Minimal FITS file with columns: `source_id`, `Gmag`, `parallax`, `parallax_error`
 
-## Workflow
+### 2. Download Spectra & Enrich Catalog
+Run `retrieve_BPRP_spectra-export_2026.v2.ipynb`:
+- Auto-fetches ra/dec from Gaia if not in input
+- Downloads XP spectra to `./BPRP_spectra/`
+- Enriches with Andrae+2023 (Teff, logg) and Wang+2025 (A_V)
+- Outputs `*_enriched.fits`
 
-The notebook performs the following steps for each source:
+### 3. Prepare Model Library (one-time)
+Run `download_stellar_models_phoenix_atlas_2026.v0.ipynb` to:
+- Download PHOENIX (3800-10000K) and ATLAS (10000-15000K) models
+- Normalize to 10pc flux using Padova isochrones
+- Filter PoWR models (15000-56000K) against isochrone coverage
+- Generate `model_manifest.csv` with all model properties
 
-### 1. Spectrum Acquisition
-- **Check local**: Looks for spectrum in `./hot_star_BPRP_spectra/`
-- **Auto-download**: If not found, queries Gaia DR3 with your credentials and downloads it
-- **Skip**: If spectrum unavailable in Gaia, skips that source
-
-### 2. Model Fitting
-- Loads PoWR models from `./griddl-gal-ob-vd3-line_calib/`
-- (Optional) Loads ATLAS models from `./atlas9_models/`
-- Resamples models to exact Gaia wavelength grid
-- Performs grid search over:
-  - Teff, log g (from model grid)
-  - A_V: 0.0-5.0 mag in 0.1 mag steps
-  - R_V: [2.5, 3.1, 4.0, 5.0]
-- Fits scaling factor (distance) via weighted least-squares
-- Includes parallax constraint in χ² if available
-
-### 3. Output Generation
-- **CSV file**: `hot_star_powr_fits.csv` with all fit parameters
-- **Diagnostic plots**: `./fit_plots/fit_{source_id}.png` for each star
-
-## Required Directory Structure
-
-```
-./
-├── hot_star_sample.fits              # Your input catalog
-├── griddl-gal-ob-vd3-line_calib/     # PoWR models (required)
-├── atlas9_models/                     # ATLAS models (optional)
-├── hot_star_BPRP_spectra/            # Downloaded spectra (auto-created)
-├── fit_plots/                         # Output plots (auto-created)
-└── fit_hot_stars_with_auto_download.ipynb
-```
-
-## Output Files
-
-### CSV: `hot_star_powr_fits.csv`
-Contains for each successfully fitted star:
-- source_id, name (generic)
-- Teff, logg (stellar parameters)
-- A_V, R_V (extinction)
-- distance_pc (spectroscopic distance)
-- gmag, M_G (apparent and absolute magnitude)
-- chi2_reduced, chi2_spectrum, chi2_parallax (fit quality)
-- dof (degrees of freedom)
-- model_type (PoWR or ATLAS)
-
-### Plots: `./fit_plots/fit_{source_id}.png`
-Each plot shows:
-- Top panel: Observed spectrum (black), best-fit model (red), unreddened model (blue dashed)
-- Bottom panel: Fit residuals in units of σ
-- Title: Best-fit parameters and χ²
-
-## Gaia Credentials
-
-The notebook uses hardcoded Gaia archive credentials:
-- Username: `hrix01`
-- Password: `Whynot2024?`
-
-These are used to download BP/RP spectra via the Gaia DataLink service.
+### 4. Run Fitting
+Run `fit_PoWRmodels_to_BPRP_hot_stars_Gordon24_2026.v4.ipynb`:
+- Full brute-force search over all ~470 models
+- PSM (Polynomial Spectral Model) refinement for continuous parameters
+- Gordon+2023 R(V)-dependent extinction law
+- Joint χ² with parallax constraint
 
 ## Model Grid
 
-The code fits over:
-- **~120 PoWR models** (different Teff and log g combinations)
-- **51 A_V values** (0.0 to 5.0 in 0.1 mag steps)
-- **4 R_V values** (2.5, 3.1, 4.0, 5.0)
-- **Total: ~24,000 model evaluations per star**
+| Model | Type | Teff Range | N_models |
+|-------|------|------------|----------|
+| **PHOENIX** | Plane-parallel | 3,800–10,000 K | 192 |
+| **ATLAS** | Plane-parallel, LTE | 10,000–15,000 K | 39 |
+| **PoWR** | Spherical, NLTE, wind | 15,000–56,000 K | 240 |
 
-## Key Features
+**Total: ~471 models** covering 3,800–56,000 K with log g = 2.0–4.5.
 
-1. **Automatic spectrum retrieval**: No manual downloads needed
-2. **Parallax constraints**: Uses Gaia parallax in fitting when available
-3. **CCM89 extinction**: Cardelli, Clayton & Mathis (1989) reddening law
-4. **Generic naming**: Stars named as `Source_{source_id}`
-5. **Robust error handling**: Skips sources without spectra gracefully
+## Fitting Algorithm (v4)
 
-## Execution Time
+1. **Brute-force search**: Evaluate all models to find best discrete (Teff, logg, A_V, R_V)
+2. **PSM refinement**: Build local 2D quadratic model in 3×3 neighborhood
+3. **Continuous optimization**: L-BFGS-B over (Teff, logg, A_V, R_V)
+4. **Auxiliary interpolation**: logL and Mass via PSM, R via Stefan-Boltzmann
 
-Approximate timing (depends on your system):
-- Model loading: ~30 seconds
-- Per-star fitting: ~10-30 seconds
-- For 100 stars: ~20-50 minutes
+Based on Rix et al. (2016, ApJL 826, L25).
 
-## Notes
+## Output
 
-- The code assumes all necessary model files are present in the specified directories
-- Spectra are downloaded only once and cached locally
-- If a source has no BP/RP spectrum in Gaia, it will be skipped
-- The code handles NaN values in parallax/magnitude columns gracefully
+CSV with columns:
+- `Teff_fit`, `logg_fit`, `A_V_fit`, `R_V_fit`: PSM-refined parameters
+- `logL_fit`, `Mass_fit`, `R_Rsun_fit`: PSM-interpolated stellar properties
+- `*_grid`: Discrete best-model values for comparison
+- `distance_pc`, `chi2_red`, `psm_refined`, `n_psm_neighbors`
+
+Diagnostic plots in `./fit_plots/`.
+
+## Directory Structure
+
+```
+./
+├── retrieve_BPRP_spectra-export_2026.v2.ipynb   # Step 2: Download + enrich
+├── download_stellar_models_phoenix_atlas_2026.v0.ipynb  # Step 3: Model prep
+├── fit_PoWRmodels_to_BPRP_hot_stars_Gordon24_2026.v4.ipynb  # Step 4: Fit
+├── model_manifest.csv        # Model properties (Teff, logg, Mass, L, R)
+├── Padova_isochrones.fits    # For model normalization
+├── stellar_models/           # PHOENIX + ATLAS models
+├── griddl-gal-ob-vd3-line_calib/  # PoWR models
+├── BPRP_spectra/             # Downloaded Gaia XP spectra
+└── fit_plots/                # Output diagnostic plots
+```
+
+## References
+
+- Gordon, K. D., et al. 2023, ApJ, 950, 86 (G23 extinction law)
+- Rix, H.-W., et al. 2016, ApJL, 826, L25 (Polynomial Spectral Models)
+- Padova isochrones: Bressan et al. 2012, MNRAS, 427, 127
+- PoWR: Sander et al. 2015, A&A, 577, A13
+- ATLAS9: Castelli & Kurucz 2003
+- PHOENIX: Husser et al. 2013, A&A, 553, A6
