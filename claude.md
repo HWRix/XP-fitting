@@ -78,13 +78,37 @@ source_id, Teff_fit, logg_fit, A_V_fit, R_V_fit,      # PSM-refined
 - `Code_Details.md` — Pipeline, file formats, function documentation (includes v4 PSM details)
 - `Code_issues_problems_improvements.md` — Known issues and roadmap
 
+## GitHub Repository
+
+**Remote:** `git@github.com:HWRix/XP-fitting.git`
+
+**Branch:** `feature/extend-models-add-mass-filter-powr`
+
+### Commit Protocol
+After making significant changes to notebooks or code files:
+```bash
+git add <modified-files>
+git commit -m "Description of changes"
+git push origin feature/extend-models-add-mass-filter-powr
+```
+
+Claude should commit and push changes at the end of each working session or after completing major features.
+
+## Recent Changes
+- **2026-01-04**: Added H-alpha emission detection for Teff > 7000K
+  - Fits residuals with linear continuum + Gaussian (center=656.3nm, σ=3.4nm)
+  - Output columns: `Ha_EW`, `Ha_EW_err`, `Ha_fit_success`
+  - Vertical red dashed line at H-alpha in residuals plot
+
 ## Potential Next Steps
-- [ ] Regenerate model_manifest.csv (remove PoWR duplicates)
-- [ ] Run v4 with N_MAX_FIT=None for full sample
+- [x] Regenerate model_manifest.csv (remove PoWR duplicates)
+- [x] Run v4 with N_MAX_FIT=None for full sample
+- [x] Add H-alpha emission detection
 - [ ] Add logg=1.0 to PHOENIX grid (for giants)
 - [ ] Expand R_V grid to ~10 values
 - [ ] Add quality flags (boundary, degeneracy)
 - [ ] Parallelization for large catalogs
+- [ ] Add age from isochrones
 
 ---
 Last updated: 2026-01-04
