@@ -60,6 +60,13 @@ Three-notebook pipeline:
 - `./stellar_models/` — ATLAS+PHOENIX models normalized to 10pc
 - `./BPRP_spectra/` — Downloaded Gaia XP spectra
 
+### Sample Datasets
+- **CarOB1** (Carina OB1 association):
+  - `CarOB1_OBcluster.fits` — Source catalog with Gaia source_id, ra, dec, parallax, Gmag
+  - `CarOB1_OBcluster_Sptypes.fits` — Spectral types (SpT-GES, SpT-GOSSS) and luminosity classes (LC-GES, LC-GOSSS)
+  - `CarOB1_prep.ipynb` — Prepares input for the pipeline (merges catalogs, outputs `CarOB1_sample.fits`)
+  - `CarOB1_validation_plots.ipynb` — Validates Teff_fit and M_G_fit against SpT+LC calibrations
+
 ### v4 Output Format
 ```
 source_id, Teff_fit, logg_fit, A_V_fit, R_V_fit,      # PSM-refined
@@ -67,8 +74,25 @@ source_id, Teff_fit, logg_fit, A_V_fit, R_V_fit,      # PSM-refined
            Teff_grid, logg_grid, A_V_grid, R_V_grid,  # Discrete best
            logL_grid, Mass_grid, logAge_grid, R_Rsun_grid, # Discrete aux
            distance_pc, chi2_red, psm_refined, n_psm_neighbors,
+           parallax_zp_offset_mas, parallax_corrected_mas,  # Parallax correction
            Ha_EW, Ha_EW_err, Ha_fit_success, ...      # H-alpha emission
 ```
+
+### Parallax Zero-Point Correction
+
+Gaia DR3 parallaxes have a systematic negative bias (measured parallaxes too small).
+We apply a correction: `parallax_corrected = parallax_input + offset`
+
+**Literature values for bright stars (G < 11 mag):**
+| Source | Zero-Point | Reference |
+|--------|-----------|-----------|
+| Quasars (global) | -17 to -21 μas | Lindegren+2021 |
+| Bright stars | -30 to -40 μas | Groenewegen 2021, 2023 |
+| VLBI comparison | -38 ± 11 μas | Recent VLBI studies |
+
+**Current setting:** `PARALLAX_ZEROPOINT_OFFSET = +0.04 mas` (40 μas)
+
+This makes parallaxes larger → distances smaller (corrects for stars appearing too far).
 
 ## Before Running v4
 
@@ -78,6 +102,17 @@ source_id, Teff_fit, logg_fit, A_V_fit, R_V_fit,      # PSM-refined
 - `Code_Summary.md` — Physics rationale (extinction, isochrones, joint fitting)
 - `Code_Details.md` — Pipeline, file formats, function documentation (includes v4 PSM details)
 - `Code_issues_problems_improvements.md` — Known issues and roadmap
+
+### SpT-Teff Calibration (Mamajek 2019)
+Used in validation: https://www.pas.rochester.edu/~emamajek/EEM_dwarf_UBVIJHK_colors_Teff.txt
+
+| SpT | Teff (K) | SpT | Teff (K) | SpT | Teff (K) |
+|-----|----------|-----|----------|-----|----------|
+| O2 | 54000 | O7 | 37100 | B1 | 26000 |
+| O3 | 44900 | O8 | 35100 | B2 | 20600 |
+| O4 | 42900 | O9 | 33300 | B3 | 17000 |
+| O5 | 41400 | B0 | 31400 | B5 | 15700 |
+| O6 | 39500 | B0.5 | 29000 | B9 | 10700 |
 
 ## GitHub Repository
 
@@ -96,6 +131,16 @@ git push origin feature/extend-models-add-mass-filter-powr
 Claude should commit and push changes at the end of each working session or after completing major features.
 
 ## Recent Changes
+- **2026-01-13**: Added CarOB1 validation against spectral types
+  - `CarOB1_validation_plots.ipynb` — Compares Teff_fit to Teff from spectral types
+  - Uses Mamajek (2019) SpT-Teff calibration for O2-B9 dwarfs
+  - Parses GOSSS/GES spectral types (O9.7, B2.5, etc.)
+  - Analyzes A_V as potential source of systematics
+  - Compares M_G_fit to M_G from SpT + luminosity class (LC V/IV/III/II/I)
+  - Outputs: `CarOB1_Teff_validation.png`, `CarOB1_AV_systematics.png`, `CarOB1_MG_validation.png`
+- **2026-01-13**: Added CarOB1 (Carina OB1) sample preparation
+  - `CarOB1_prep.ipynb` — Merges cluster catalog with spectral types
+  - Outputs `CarOB1_sample.fits` ready for retrieve + fitting pipeline
 - **2026-01-04**: Added stellar age (logAge) from isochrones
   - `find_nearest_isochrone()` now returns logAge and logAge_std
   - model_manifest.csv includes logAge column
@@ -111,10 +156,11 @@ Claude should commit and push changes at the end of each working session or afte
 - [x] Run v4 with N_MAX_FIT=None for full sample
 - [x] Add H-alpha emission detection
 - [x] Add age from isochrones
+- [x] Validate Teff against spectral types (CarOB1_validation_plots.ipynb)
 - [ ] Add logg=1.0 to PHOENIX grid (for giants)
 - [ ] Expand R_V grid to ~10 values
 - [ ] Add quality flags (boundary, degeneracy)
 - [ ] Parallelization for large catalogs
 
 ---
-Last updated: 2026-01-04
+Last updated: 2026-01-13
